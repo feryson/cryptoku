@@ -188,6 +188,40 @@
                     </div>
                 </div>
 
+                <!-- ECONOMIC NEWS FILTER & MOMENTUM SIGNAL CARD -->
+                <div class="bg-darkcard border border-bordercolor rounded-2xl p-5 shadow-lg space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-bordercolor pb-3">
+                        <div>
+                            <h4 class="font-bold text-white text-base flex items-center gap-2">
+                                <i data-lucide="newspaper" class="w-5 h-5 text-rose-400"></i> Jadwal News High-Impact (WIB) & Momentum Filter
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Hindari entry baru 15 menit sebelum/sesudah news merah, atau gunakan mode News Momentum.</p>
+                        </div>
+                        <span id="news-status-badge" class="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold mono self-start sm:self-center">
+                            SAFE ZONE (NO NEWS NOW)
+                        </span>
+                    </div>
+
+                    <div id="news-schedule-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <!-- Rendered by JS -->
+                    </div>
+
+                    <!-- NEWS MOMENTUM ACTION PANEL -->
+                    <div class="bg-slate-900/70 p-4 rounded-xl border border-amber-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div class="space-y-1">
+                            <span class="text-xs font-bold text-binanceyellow flex items-center gap-1.5">
+                                <i data-lucide="flame" class="w-4 h-4"></i> Sinyal Momentum News (<span id="news-active-coin">BTCUSDT.P</span>)
+                            </span>
+                            <p id="news-momentum-desc" class="text-xs text-slate-300">
+                                Saat volatilitas news rilis, harga cenderung menyapu likuiditas bawah sebelum rebound cepat.
+                            </p>
+                        </div>
+                        <button onclick="executeNewsMomentumOrder()" class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-bold text-xs rounded-xl whitespace-nowrap flex items-center gap-1.5 shadow-lg shadow-amber-500/10 transition-all">
+                            <i data-lucide="trending-up" class="w-4 h-4"></i> Pasang Momentum News
+                        </button>
+                    </div>
+                </div>
+
                 <!-- 7-DAY BACKTEST TABLE -->
                 <div class="bg-darkcard border border-bordercolor rounded-2xl p-5 shadow-lg space-y-4">
                     <div class="flex items-center justify-between">
@@ -543,7 +577,96 @@
             document.getElementById('prev-low').innerText = `$${yLow.toLocaleString()}`;
             document.getElementById('fib-level').innerText = `$${fibLevel.toLocaleString()}`;
 
+            document.getElementById('news-active-coin').innerText = symObj.name;
+            updateNewsMomentumRecommendation(symObj.name, data.livePrice, yHigh, yLow);
+
             renderBacktestTable(klines);
+        }
+
+        // High-Impact Economic News Schedule in WIB
+        const ECONOMIC_NEWS_WIB = [
+            { time: "19:30", title: "US Core CPI & CPI m/m", impact: "HIGH", advice: "Hindari limit dekat harga saat rilis. Pasang Buy Limit 1.2% di bawah harga spot." },
+            { time: "20:30", title: "US Initial Jobless Claims & PPI", impact: "HIGH", advice: "Volatilitas sedang-tinggi. Tunggu candle 15m pertama selesai sebelum entry." },
+            { time: "21:45", title: "US Flash Manufacturing & Services PMI", impact: "MEDIUM", advice: "Aman untuk strategi 07:00 WIB dengan TP konservatif 1.0%." },
+            { time: "01:00", title: "FOMC Statement & Fed Interest Rate", impact: "EXTREME", advice: "Wajib tutup/kunci posisi atau pasang jaring momentum retracement dalam (-1.8%)." }
+        ];
+
+        function renderNewsSchedule() {
+            const container = document.getElementById('news-schedule-list');
+            const now = new Date();
+            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const wibTime = new Date(utcTime + (3600000 * 7));
+            const currentMinutes = wibTime.getHours() * 60 + wibTime.getMinutes();
+
+            let nearNews = false;
+
+            container.innerHTML = ECONOMIC_NEWS_WIB.map(news => {
+                const [h, m] = news.time.split(':').map(Number);
+                const newsMinutes = h * 60 + m;
+                const diff = Math.abs(currentMinutes - newsMinutes);
+                const isDangerWindow = diff <= 30;
+                if (isDangerWindow) nearNews = true;
+
+                const impactColor = news.impact === 'EXTREME' ? 'bg-rose-600/20 text-rose-400 border-rose-500/30' :
+                                    news.impact === 'HIGH' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                                    'bg-blue-500/20 text-blue-400 border-blue-500/30';
+
+                return `
+                    <div class="p-3.5 rounded-xl border ${isDangerWindow ? 'bg-rose-950/30 border-rose-500/50 animate-pulse' : 'bg-slate-900/60 border-bordercolor'} flex flex-col justify-between gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="mono font-bold text-sm text-white flex items-center gap-1.5">
+                                <i data-lucide="clock" class="w-3.5 h-3.5 text-binanceyellow"></i> ${news.time} WIB
+                            </span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${impactColor}">
+                                ${news.impact} IMPACT
+                            </span>
+                        </div>
+                        <div class="font-semibold text-xs text-slate-200">${news.title}</div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">${news.advice}</p>
+                    </div>
+                `;
+            }).join('');
+
+            const statusBadge = document.getElementById('news-status-badge');
+            if (nearNews) {
+                statusBadge.innerText = "⚠️ DANGER ZONE: NEWS RELEASE";
+                statusBadge.className = "px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/40 rounded-xl text-xs font-bold mono self-start sm:self-center animate-pulse";
+            } else {
+                statusBadge.innerText = "✅ SAFE ZONE (NO NEWS NOW)";
+                statusBadge.className = "px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold mono self-start sm:self-center";
+            }
+        }
+
+        function updateNewsMomentumRecommendation(coinName, livePrice, yHigh, yLow) {
+            const mid = (yHigh + yLow) / 2;
+            const bias = livePrice >= mid ? 'BULLISH MOMENTUM (Buy Spike Dip)' : 'BEARISH REVERSAL (Buy Deep Wick)';
+            const dipEntry = (livePrice * 0.988).toFixed(2);
+            const quickTp = (dipEntry * 1.015).toFixed(2);
+            document.getElementById('news-momentum-desc').innerHTML = `
+                Rekomendasi <strong>${bias}</strong>: Pasang jaring limit di <span class="mono text-white font-semibold">$${Number(dipEntry).toLocaleString()}</span> dengan target pantulan cepat TP <span class="mono text-emerald-400 font-semibold">$${Number(quickTp).toLocaleString()}</span> (+1.5%).
+            `;
+        }
+
+        function executeNewsMomentumOrder() {
+            const sym = currentSymbol;
+            const data = marketData[sym];
+            if (!data) return;
+
+            const dipEntry = Number((data.livePrice * 0.988).toFixed(2));
+            const quickTp = Number((dipEntry * 1.015).toFixed(2));
+            const tightSl = Number((dipEntry * 0.985).toFixed(2));
+
+            simulatedTrades.unshift({
+                id: Date.now(),
+                symbol: `${sym} (NEWS)`,
+                entry: `$${dipEntry.toLocaleString()}`,
+                tp: `$${quickTp.toLocaleString()}`,
+                sl: `$${tightSl.toLocaleString()}`,
+                time: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})
+            });
+
+            renderSimulatedTrades();
+            showToast("Order Momentum News Aktif!", `Jaring News ${sym}.P dipasang di $${dipEntry.toLocaleString()} (TP: $${quickTp.toLocaleString()}).`);
         }
 
         // Render 7-Day Backtest with Verified Binance Futures Price Action & >90% Win-Rate Rules
@@ -680,8 +803,10 @@
 
         window.onload = function() {
             initIcons();
+            renderNewsSchedule();
             fetchAllData();
             setInterval(fetchAllData, 10000);
+            setInterval(renderNewsSchedule, 60000);
         }
     </script>
 </body>
